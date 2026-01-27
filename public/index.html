@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Feedback Analyzer</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@sgratzl/chartjs-chart-boxplot@4.1.1/build/index.umd.js"></script>
+  <style>
+    body { font-family: Inter, system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    header { padding: 16px 20px; background: #111827; border-bottom: 1px solid #1f2937; }
+    main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+    .card { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    textarea { width: 100%; min-height: 120px; border-radius: 8px; border: 1px solid #1f2937; padding: 10px; background: #0b1224; color: #e2e8f0; }
+    button { background: #22c55e; color: #0b1224; border: none; padding: 10px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    button.secondary { background: #3b82f6; }
+    button.danger { background: #ef4444; }
+    button.small { padding: 4px 8px; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 8px 6px; border-bottom: 1px solid #1f2937; text-align: left; }
+    td[contenteditable="true"] { background: #1f2937; cursor: text; padding: 4px; border-radius: 4px; }
+    .tag { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; background: #1f2937; }
+    .pill { padding: 4px 8px; border-radius: 8px; background: #1f2937; font-size: 12px; }
+    .row { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    input, select { width: min-content; padding: 10px; border-radius: 8px; border: 1px solid #1f2937; background: #0b1224; color: #e2e8f0; }
+    .flex { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .tab-nav { display: flex; gap: 8px; border-bottom: 1px solid #1f2937; margin-bottom: 16px; }
+    .tab-btn { background: transparent; color: #94a3b8; border: none; padding: 10px 14px; cursor: pointer; border-bottom: 2px solid transparent; }
+    .tab-btn.active { color: #22c55e; border-bottom-color: #22c55e; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .th-filter { display: flex; align-items: center; gap: 6px; }
+    .th-filter select { background: #0b1224; border: 1px solid #1f2937; color: #e2e8f0; padding: 4px 6px; border-radius: 6px; font-size: 12px; width: 10px; padding: 5px 8px;}
+    .likert-stars { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+    .likert-stars span { font-size: 18px; cursor: pointer; transition: transform 0.1s; }
+    .likert-stars span:hover { transform: scale(1.2); }
+    .likert-stars span.active { filter: drop-shadow(0 0 2px #22c55e); }
+    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 999; align-items: center; justify-content: center; }
+    .modal.active { display: flex; }
+    .modal-content { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+    .modal-close { float: right; font-size: 24px; cursor: pointer; color: #94a3b8; background: none; border: none; padding: 0; }
+    .modal-close:hover { color: #e2e8f0; }
+    /* Sentiment slider tooltip */
+    .sentiment-tooltip { position: absolute; bottom: 28px; transform: translateX(-50%); background: #111827; border: 1px solid #1f2937; color: #e2e8f0; padding: 4px 8px; border-radius: 6px; font-size: 12px; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+    .sentiment-tooltip::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 6px; border-style: solid; border-color: #1f2937 transparent transparent transparent; }
+    .selection-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; background: #22c55e; color: #0b1224; border-radius: 999px; font-size: 13px; font-weight: 500; }
+    .selection-chip-close { cursor: pointer; background: rgba(0,0,0,0.2); border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; transition: background 0.2s; }
+    .selection-chip-close:hover { background: rgba(0,0,0,0.4); }
+  </style>
+</head>
+<body>
+  <header><h2>Feedback Analyzer (Workers + D1 + AI + Hono)</h2></header>
+  <main>
+    <div class="card">
+      <h3>Submit Feedback</h3>
+      <button id="openFeedbackBtn" style="width: 100%; margin-top: 8px;">Open Feedback Form</button>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <div class="flex" style="justify-content: space-between; align-items: center;">
+          <h3>Tags</h3>
+          <button id="refresh">Refresh</button>
+        </div>
+        <canvas id="tagChart" height="200"></canvas>
+      </div>
+      <div class="card">
+        <h3>Sentiment</h3>
+        <canvas id="sentChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <div class="flex" style="justify-content: space-between; align-items: center;">
+          <h3>Sentiment Distribution</h3>
+          <select id="groupBySelect" style="width: 150px;">
+            <option value="tier">By Tier</option>
+            <option value="status">By Status</option>
+            <option value="tag">By Tag</option>
+            <option value="channel">By Channel</option>
+          </select>
+        </div>
+        <canvas id="tierChart" height="200"></canvas>
+      </div>
+      <div class="card">
+        <h3>Urgency vs Impact</h3>
+        <canvas id="bubbleChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h3>Status Workflow Timeline</h3>
+        <canvas id="timelineChart" height="200"></canvas>
+      </div>
+      <div class="card">
+        <h3>Avg Resolution Time by Tag</h3>
+        <canvas id="resolutionChart" height="200"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Search</h3>
+      <input id="search" style="width: -webkit-fill-available;" placeholder="Search feedback" />
+      <div id="selectionIndicator" style="margin-top: 8px;"></div>
+      <div id="searchResults"></div>
+    </div>
+
+    <div class="card">
+      <h3>Feedback Library</h3>
+
+      <div style="overflow-x: auto;">
+        <table id="table-main">
+          <thead>
+            <tr>
+              <th style="width: 60px;">ID</th>
+              <th>
+                <div class="th-filter">
+                  <span>Status</span>
+                  <select id="filterStatus">
+                    <option value="">All</option>
+                    <option value="To Do">To Do</option>
+                    <option value="in progress">In Progress</option>
+                    <option value="to be reviewed">To Review</option>
+                    <option value="done">Done</option>
+                  </select>
+                </div>
+              </th>
+              <th>
+                <div class="th-filter">
+                  <span>Tag</span>
+                  <select id="filterTag">
+                    <option value="">All</option>
+                    <option value="Bug Report">Bug Report</option>
+                    <option value="Feature Request">Feature Request</option>
+                    <option value="Urgent">Urgent</option>
+                    <option value="Security">Security</option>
+                    <option value="Performance">Performance</option>
+                    <option value="Praise">Praise</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </th>
+              <th>
+                <div class="th-filter">
+                  <span>Sentiment</span>
+                  <select id="sentimentSort">
+                    <option value="">Default</option>
+                    <option value="positive_desc">Most Positive</option>
+                    <option value="negative_desc">Most Negative</option>
+                  </select>
+                </div>
+              </th>
+              <th style="min-width: 320px;">Text</th>
+              <th>
+                <div class="th-filter">
+                  <span>Tier</span>
+                  <select id="filterTier">
+                    <option value="">All</option>
+                    <option value="free">Free</option>
+                    <option value="pro">Pro</option>
+                    <option value="business">Business</option>
+                    <option value="enterprise">Enterprise</option>
+                  </select>
+                </div>
+              </th>
+              <th>
+                <div class="th-filter">
+                  <span>Channel</span>
+                  <select id="filterSource">
+                    <option value="">All</option>
+                    <option value="web">Web</option>
+                    <option value="discord">Discord</option>
+                    <option value="github">GitHub</option>
+                    <option value="twitter">Twitter</option>
+                    <option value="email">Email</option>
+                    <option value="support">Support</option>
+                  </select>
+                </div>
+              </th>
+              <th>
+                <div class="th-filter">
+                  <span>When</span>
+                  <select id="whenSelect">
+                    <option value="updated_desc">Updated · Newest</option>
+                    <option value="updated_asc">Updated · Oldest</option>
+                    <option value="created_desc">Created · Newest</option>
+                    <option value="created_asc">Created · Oldest</option>
+                  </select>
+                </div>
+              </th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="flex" style="margin: 12px 0; gap: 12px; align-items: center;">
+        <div style="min-width: 160px;">
+          <label style="font-size: 12px; color: #94a3b8;">Entries per page:</label>
+          <select id="pageSize" style="width: 100%;">
+            <option value="5">5 entries</option>
+            <option value="10" selected>10 entries</option>
+            <option value="20">20 entries</option>
+            <option value="50">50 entries</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="pagination-main" class="flex" style="margin-top: 8px; justify-content: center; gap: 8px;"></div>
+    </div>
+
+    <!-- Timeline / Gantt View -->
+    <div class="card">
+      <h3>📅 Timeline View</h3>
+      <div style="margin-bottom: 16px;">
+        <label style="font-size: 13px; color: #94a3b8; margin-right: 8px;">Group by:</label>
+        <select id="ganttGroupBy" style="width: 120px;">
+          <option value="status">Status</option>
+          <option value="tier">Tier</option>
+          <option value="tag">Tag</option>
+        </select>
+      </div>
+      <div id="ganttContainer" style="overflow-x: auto; overflow-y: auto; max-height: 600px;"></div>
+    </div>
+  </main>
+
+  <!-- Modal: Sentiment Editor -->
+  <div id="sentimentModal" class="modal">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeSentimentModal()">&times;</button>
+      <h3>Edit Sentiment</h3>
+      <p id="sentimentLabel" style="font-size: 12px; color: #94a3b8;">Feedback ID: </p>
+      <div style="margin: 16px 0;">
+        <label style="display: block; margin-bottom: 8px;">Select sentiment (continuous):</label>
+        <div style="display:flex; flex-direction:column; gap:12px; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px; width:100%; justify-content:center;">
+            <div id="sentimentSliderWrap" style="position:relative; flex:1; max-width: 520px; margin: 6px 12px;">
+              <input type="range" id="sentimentSlider" min="-1" max="1" step="0.01" value="0" 
+                     style="width:100%; accent-color:#3b82f6; height: 6px; position: relative; z-index: 1;">
+              <div id="sentimentTooltip" class="sentiment-tooltip">
+                <span id="sentimentTooltipEmoji">😐</span>
+                <span id="sentimentTooltipValue">0.00</span>
+              </div>
+            </div>
+          </div>
+          <div style="width:100%; display:flex; justify-content:space-between; font-size:11px; color:#64748b; max-width:520px;">
+            <span>-1.0</span><span>0</span><span>1.0</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top: 16px; text-align: center;">
+        <button class="secondary" onclick="closeSentimentModal()">Cancel</button>
+        <button style="margin-left: 8px;" onclick="saveSentimentEdit()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Feedback Form -->
+  <div id="feedbackModal" class="modal">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeFeedbackModal()">&times;</button>
+      <h3>Submit Feedback</h3>
+      <div class="flex" style="flex-direction: column; gap: 12px;">
+        <div style="width:100%;">
+          <label style="font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px;">Channel</label>
+          <select id="modalChannel">
+            <option value="web">Web</option>
+            <option value="discord">Discord</option>
+            <option value="github">GitHub</option>
+            <option value="twitter">Twitter</option>
+            <option value="email">Email</option>
+          </select>
+        </div>
+        <div style="width:100%;">
+          <label style="font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px;">Source</label>
+          <input id="modalSource" placeholder="e.g., user123" />
+        </div>
+        <div style="width:100%;">
+          <label style="font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px;">Feedback</label>
+          <textarea id="modalFeedback" placeholder="Paste feedback here..." style="min-height: 120px;"></textarea>
+        </div>
+        <div id="modalStatus" class="pill"></div>
+        <div style="text-align: center; gap: 8px; display: flex;">
+          <button class="secondary" onclick="closeFeedbackModal()" style="flex: 1;">Cancel</button>
+          <button id="modalSubmit" style="flex: 1;" onclick="submitFeedbackModal()">Save & Analyze</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/dashboard.js"></script>
+</body>
+</html>
