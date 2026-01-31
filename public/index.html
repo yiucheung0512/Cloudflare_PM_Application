@@ -16,7 +16,7 @@
     button { background: #22c55e; color: #0b1224; border: none; padding: 10px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     button.secondary { background: #3b82f6; }
-    button.danger { background: #ef4444; }
+    button.danger { background: #ef4444; color: white;}
     button.small { padding: 4px 8px; font-size: 12px; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td { padding: 8px 6px; border-bottom: 1px solid #1f2937; text-align: left; }
@@ -42,33 +42,92 @@
     .modal-content { background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
     .modal-close { float: right; font-size: 24px; cursor: pointer; color: #94a3b8; background: none; border: none; padding: 0; }
     .modal-close:hover { color: #e2e8f0; }
+    #modalFeedback { width: -webkit-fill-available; }
     /* Sentiment slider tooltip */
     .sentiment-tooltip { position: absolute; bottom: 28px; transform: translateX(-50%); background: #111827; border: 1px solid #1f2937; color: #e2e8f0; padding: 4px 8px; border-radius: 6px; font-size: 12px; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     .sentiment-tooltip::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 6px; border-style: solid; border-color: #1f2937 transparent transparent transparent; }
     .selection-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; background: #22c55e; color: #0b1224; border-radius: 999px; font-size: 13px; font-weight: 500; }
     .selection-chip-close { cursor: pointer; background: rgba(0,0,0,0.2); border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; transition: background 0.2s; }
     .selection-chip-close:hover { background: rgba(0,0,0,0.4); }
+    .daily-summary-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+    .daily-summary-header:hover { opacity: 0.8; }
+    .daily-summary-toggle { font-size: 16px; transition: transform 0.3s; }
+    .daily-summary-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    .daily-summary-meta { display: flex; gap: 12px; align-items: center; font-size: 12px; color: #94a3b8; }
+    .daily-summary-content { background: #0b1224; padding: 16px; border-radius: 8px; color: #cbd5e1; line-height: 1.8; max-height: 500px; overflow-y: auto; }
+    .daily-summary-content strong { color: #e2e8f0; font-weight: 600; }
+    .daily-summary-content ul { margin: 8px 0; padding-left: 20px; }
+    .daily-summary-content li { margin: 4px 0; }
+    .daily-summary-content > div:first-child { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #1f2937; }
+    /* Scrollbar styling */
+    body { scrollbar-width: thin; scrollbar-color: #22c55e #1f2937; }
+    body::-webkit-scrollbar { width: 10px; height: 10px; }
+    body::-webkit-scrollbar-track { background: #1f2937; }
+    body::-webkit-scrollbar-thumb { background: #22c55e; border-radius: 5px; }
+    body::-webkit-scrollbar-thumb:hover { background: #16a34a; }
+    .modal-content { scrollbar-width: thin; scrollbar-color: #22c55e #1f2937; }
+    .modal-content::-webkit-scrollbar { width: 8px; }
+    .modal-content::-webkit-scrollbar-track { background: #0b1224; }
+    .modal-content::-webkit-scrollbar-thumb { background: #22c55e; border-radius: 4px; }
+    .modal-content::-webkit-scrollbar-thumb:hover { background: #16a34a; }
+    .daily-summary-content { scrollbar-width: thin; scrollbar-color: #22c55e #1f2937; }
+    .daily-summary-content::-webkit-scrollbar { width: 8px; }
+    .daily-summary-content::-webkit-scrollbar-track { background: #0b1224; }
+    .daily-summary-content::-webkit-scrollbar-thumb { background: #22c55e; border-radius: 4px; }
+    .daily-summary-content::-webkit-scrollbar-thumb:hover { background: #16a34a; }
+    h3 { margin: 2px 0; }
   </style>
 </head>
 <body>
   <header><h2>Feedback Analyzer (Workers + D1 + AI + Hono)</h2></header>
   <main>
     <div class="card">
-      <h3>Submit Feedback</h3>
+      <h3 style="margin: 0;">Submit Feedback</h3>
       <button id="openFeedbackBtn" style="width: 100%; margin-top: 8px;">Open Feedback Form</button>
     </div>
 
+    <div class="card">
+      <div class="daily-summary-header" id="dailySummaryHeader">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="daily-summary-toggle" id="dailySummaryToggle">▼</span>
+          <h3 style="margin: 0;">📅 Daily Feedback Summary</h3>
+        </div>
+      </div>
+      <div id="dailySummaryContainer" style="display: none;">
+        <div class="daily-summary-controls">
+          <select id="dailySummaryDate" style="flex: 1; min-width: 180px;">
+            <option value="">Select a date...</option>
+          </select>
+          <button id="loadDailySummary" class="small">Load Summary</button>
+          <span id="dailySummaryStatus" style="color: #94a3b8; font-size: 13px; white-space: nowrap;"></span>
+        </div>
+        <div id="dailySummaryContent" style="display: none;">
+          <div id="dailySummaryMeta" style="color: #94a3b8; font-size: 12px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #1f2937;"></div>
+          <div id="dailySummaryText" style="color: #e2e8f0;"></div>
+        </div>
+        <div id="dailySummaryPlaceholder" style="color: #94a3b8; font-style: italic; text-align: center; padding: 32px 16px;">
+          Select a date to view the AI-generated summary.
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="card">
+        <div class="flex" style="justify-content: space-between; align-items: center;">
+          <h3 style="margin: 0;">Feedbacks Visualisations</h3>
+          <button id="refresh">Refresh</button>
+        </div>
+    </div>
+    </div>
     <div class="row">
       <div class="card">
         <div class="flex" style="justify-content: space-between; align-items: center;">
           <h3>Tags</h3>
-          <button id="refresh">Refresh</button>
         </div>
-        <canvas id="tagChart" height="200"></canvas>
+        <canvas id="tagChart" height="200" style="max-height: 400px;"></canvas>
       </div>
       <div class="card">
-        <h3>Sentiment</h3>
-        <canvas id="sentChart" height="200"></canvas>
+        <h3>Sentiment Count</h3>
+        <canvas id="sentChart" height="200" style="max-height: 400px;"></canvas>
       </div>
     </div>
 
@@ -110,90 +169,19 @@
     </div>
 
     <div class="card">
-      <h3>Feedback Library</h3>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0;">Feedback Library</h3>
+        <button id="columnConfigBtn" class="small secondary">⚙️ Columns</button>
+      </div>
+
+      <div id="columnConfig" style="display: none; background: #0b1224; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+        <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #e2e8f0;">Drag to reorder • Uncheck to hide</div>
+        <div id="columnOrder" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+      </div>
 
       <div style="overflow-x: auto;">
         <table id="table-main">
-          <thead>
-            <tr>
-              <th style="width: 60px;">ID</th>
-              <th>
-                <div class="th-filter">
-                  <span>Status</span>
-                  <select id="filterStatus">
-                    <option value="">All</option>
-                    <option value="To Do">To Do</option>
-                    <option value="in progress">In Progress</option>
-                    <option value="to be reviewed">To Review</option>
-                    <option value="done">Done</option>
-                  </select>
-                </div>
-              </th>
-              <th>
-                <div class="th-filter">
-                  <span>Tag</span>
-                  <select id="filterTag">
-                    <option value="">All</option>
-                    <option value="Bug Report">Bug Report</option>
-                    <option value="Feature Request">Feature Request</option>
-                    <option value="Urgent">Urgent</option>
-                    <option value="Security">Security</option>
-                    <option value="Performance">Performance</option>
-                    <option value="Praise">Praise</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              </th>
-              <th>
-                <div class="th-filter">
-                  <span>Sentiment</span>
-                  <select id="sentimentSort">
-                    <option value="">Default</option>
-                    <option value="positive_desc">Most Positive</option>
-                    <option value="negative_desc">Most Negative</option>
-                  </select>
-                </div>
-              </th>
-              <th style="min-width: 320px;">Text</th>
-              <th>
-                <div class="th-filter">
-                  <span>Tier</span>
-                  <select id="filterTier">
-                    <option value="">All</option>
-                    <option value="free">Free</option>
-                    <option value="pro">Pro</option>
-                    <option value="business">Business</option>
-                    <option value="enterprise">Enterprise</option>
-                  </select>
-                </div>
-              </th>
-              <th>
-                <div class="th-filter">
-                  <span>Channel</span>
-                  <select id="filterSource">
-                    <option value="">All</option>
-                    <option value="web">Web</option>
-                    <option value="discord">Discord</option>
-                    <option value="github">GitHub</option>
-                    <option value="twitter">Twitter</option>
-                    <option value="email">Email</option>
-                    <option value="support">Support</option>
-                  </select>
-                </div>
-              </th>
-              <th>
-                <div class="th-filter">
-                  <span>When</span>
-                  <select id="whenSelect">
-                    <option value="updated_desc">Updated · Newest</option>
-                    <option value="updated_asc">Updated · Oldest</option>
-                    <option value="created_desc">Created · Newest</option>
-                    <option value="created_asc">Created · Oldest</option>
-                  </select>
-                </div>
-              </th>
-              <th>Actions</th>
-            </tr>
+          <thead id="table-head">
           </thead>
           <tbody id="table-body"></tbody>
         </table>
@@ -225,7 +213,7 @@
           <option value="tag">Tag</option>
         </select>
       </div>
-      <div id="ganttContainer" style="overflow-x: auto; overflow-y: auto; max-height: 600px;"></div>
+      <div id="ganttContainer" style="overflow-x: auto; overflow-y: auto;"></div>
     </div>
   </main>
 
@@ -279,6 +267,23 @@
         <div style="width:100%;">
           <label style="font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px;">Source</label>
           <input id="modalSource" placeholder="e.g., user123" />
+        </div>
+        <div style="width:100%;">
+          <label style="font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px;">Tier</label>
+          <select id="modalTier">
+            <optgroup label="External Stakeholders">
+              <option value="free">Free User</option>
+              <option value="pro">Pro User</option>
+              <option value="business">Business User</option>
+              <option value="enterprise">Enterprise User</option>
+            </optgroup>
+            <optgroup label="Internal Stakeholders">
+              <option value="dev">Developer</option>
+              <option value="tester">QA Tester</option>
+              <option value="team lead">Team Lead</option>
+              <option value="manager">Manager</option>
+            </optgroup>
+          </select>
         </div>
         <div style="width:100%;">
           <label style="font-size: 12px; color: #94a3b8; display: block; margin-bottom: 4px;">Feedback</label>

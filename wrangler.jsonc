@@ -42,13 +42,13 @@
 		{
 		"binding": "DB",
 		"database_name": "feedback",
-		"database_id": "<your-d1-id>"
+		"database_id": "<your-d1-id>" // "06048609-14e7-4ad0-951e-46a09e4ff2af"
 		}
 	],
 	"kv_namespaces": [
 		{
 		"binding": "KV",
-		"id": "<your-kv-id>"
+		"id": "<your-kv-id>" // "9b4967082d2c4567a2b6ecff807e3ff2"
 		}
 	],
 	"ai": {

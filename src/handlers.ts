@@ -1,5 +1,5 @@
 import type { AppContext } from "./types";
-import { classifyFeedback } from "./ai";
+import { classifyFeedback, generateDailySummary } from "./ai";
 import {
   insertFeedback,
   updateFeedbackAnalysis,
@@ -16,6 +16,8 @@ import {
   getResolutionTimeByTag,
   getLatestAnalyzedFeedback,
   searchFeedback,
+  getFeedbackByDate,
+  getUniqueFeedbackDates,
   getCachedSummary,
   setCachedSummary,
   invalidateSummaryCache,
@@ -39,7 +41,7 @@ export async function handlePostFeedback(c: AppContext) {
   const source = (body.source || "user").toString();
   const channel = (body.channel || "web").toString();
   const severityHint = body.severity_hint || null;
-  const userTier = body.user_tier || null;
+  const userTier = body.tier || body.user_tier || "free";
 
   console.log("✓ [POST-FEEDBACK] Input validated:", { source, channel, feedbackLen: feedback.length });
 
@@ -207,10 +209,27 @@ export async function handlePatchFeedback(c: AppContext) {
       await invalidateSummaryCache(env);
     }
 
-    // Update text and tag
-    if (typeof body.text === "string" && body.text.trim()) {
-      const tag = (body.tag || "general").toString();
-      await updateFeedbackText(env, id, body.text.trim(), tag);
+    // Update tag only (without text)
+    if (typeof body.tag === "string" && !body.text) {
+      await env.DB.prepare(
+        "UPDATE feedback SET tag = ?, updated_at = datetime('now') WHERE id = ?"
+      ).bind(body.tag, id).run();
+      await invalidateSummaryCache(env);
+      console.log(`✅ [PATCH-FEEDBACK] Tag updated to "${body.tag}"`);
+    }
+
+    // Update text only (without changing tag)
+    if (typeof body.text === "string" && body.text.trim() && !body.tag) {
+      await env.DB.prepare(
+        "UPDATE feedback SET text = ?, updated_at = datetime('now') WHERE id = ?"
+      ).bind(body.text.trim(), id).run();
+      await invalidateSummaryCache(env);
+      console.log(`✅ [PATCH-FEEDBACK] Text updated`);
+    }
+
+    // Update both text and tag together
+    if (typeof body.text === "string" && body.text.trim() && typeof body.tag === "string") {
+      await updateFeedbackText(env, id, body.text.trim(), body.tag);
       await invalidateSummaryCache(env);
     }
 
@@ -222,10 +241,88 @@ export async function handlePatchFeedback(c: AppContext) {
   }
 }
 
+export async function handleDeleteFeedback(c: AppContext) {
+  console.log("🗑️ [DELETE-FEEDBACK] Request received");
+  
+  const env = c.env;
+  const id = parseInt(c.req.param("id"), 10);
+
+  if (!id || isNaN(id)) {
+    console.warn("⚠️ [DELETE-FEEDBACK] Invalid ID:", c.req.param("id"));
+    return c.json({ error: "Invalid ID" }, 400);
+  }
+
+  try {
+    // Delete from database
+    await env.DB.prepare("DELETE FROM feedback WHERE id = ?").bind(id).run();
+    
+    // Invalidate cache
+    await invalidateSummaryCache(env);
+    
+    console.log("✅ [DELETE-FEEDBACK] Deleted ID:", id);
+    return c.json({ success: true, id });
+  } catch (err) {
+    console.error("❌ [DELETE-FEEDBACK] Exception:", err);
+    return c.json({ error: "Delete failed" }, 500);
+  }
+}
+
 // ===== GET /health =====
 export async function handleGetHealth(c: AppContext) {
   console.log("❤️ [HEALTH] Check");
   return c.text("ok");
+}
+
+// ===== GET /analytics/daily-summary =====
+export async function handleGetDailySummary(c: AppContext) {
+  const date = c.req.query("date") || new Date().toISOString().split('T')[0];
+  console.log("📅 [GET-DAILY-SUMMARY] Request for date:", date);
+  
+  try {
+    const env = c.env;
+    const cacheKey = `daily_summary_${date}`;
+    
+    // Check cache first
+    const cached = await env.KV.get(cacheKey, "text");
+    if (cached) {
+      console.log("✅ [GET-DAILY-SUMMARY] Returning cached summary");
+      return c.json({ date, summary: cached, cached: true });
+    }
+    
+    // Get feedback for the date
+    const feedback = await getFeedbackByDate(env, date);
+    
+    if (feedback.length === 0) {
+      console.log("⚠️ [GET-DAILY-SUMMARY] No feedback for date:", date);
+      return c.json({ date, summary: `No feedback received on ${date}.`, cached: false });
+    }
+    
+    // Generate AI summary
+    const summary = await generateDailySummary(feedback, date, env);
+    
+    // Cache for 24 hours
+    await env.KV.put(cacheKey, summary, { expirationTtl: 86400 });
+    console.log("✅ [GET-DAILY-SUMMARY] Summary generated and cached");
+    
+    return c.json({ date, summary, cached: false, count: feedback.length });
+  } catch (err) {
+    console.error("❌ [GET-DAILY-SUMMARY] Exception:", err);
+    return c.json({ error: "Failed to generate daily summary" }, 500);
+  }
+}
+
+// ===== GET /analytics/feedback-dates =====
+export async function handleGetFeedbackDates(c: AppContext) {
+  console.log("📅 [GET-FEEDBACK-DATES] Request received");
+  
+  try {
+    const dates = await getUniqueFeedbackDates(c.env);
+    console.log("✅ [GET-FEEDBACK-DATES] Returning", dates.length, "dates");
+    return c.json(dates);
+  } catch (err) {
+    console.error("❌ [GET-FEEDBACK-DATES] Exception:", err);
+    return c.json({ error: "Failed to fetch dates" }, 500);
+  }
 }
 
 // ===== GET /analytics/tier-sentiment =====

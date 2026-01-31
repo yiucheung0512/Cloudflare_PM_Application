@@ -35,6 +35,20 @@ let pageState = {
   selectedId: null
 };
 
+// Column visibility and ordering state
+let columnState = {
+  visible: { id: true, status: true, tag: true, sentiment: true, text: true, tier: true, channel: true, when: true, actions: true },
+  order: ['id', 'status', 'tag', 'sentiment', 'text', 'tier', 'channel', 'when', 'actions']
+};
+
+// Try to load saved column state
+try {
+  const saved = localStorage.getItem('columnState');
+  if (saved) columnState = JSON.parse(saved);
+} catch (e) {
+  console.warn('⚠️ Failed to load column state:', e);
+}
+
 // Setup grouping selector event listener
 document.addEventListener('DOMContentLoaded', () => {
   const groupBySelect = document.getElementById('groupBySelect');
@@ -60,10 +74,11 @@ async function submit() {
   const feedback = (document.getElementById('modalFeedback').value || '').trim();
   const channel = document.getElementById('modalChannel').value;
   const source = document.getElementById('modalSource').value || 'user';
+  const tier = document.getElementById('modalTier').value;
   const status = document.getElementById('modalStatus');
   const submitBtn = document.getElementById('modalSubmit');
   
-  console.log('📝 [SUBMIT] Input:', { feedback: feedback.slice(0, 50), channel, source });
+  console.log('📝 [SUBMIT] Input:', { feedback: feedback.slice(0, 50), channel, source, tier });
   
   if (!feedback) {
     console.warn('⚠️ [SUBMIT] No feedback provided');
@@ -79,7 +94,7 @@ async function submit() {
     const res = await fetch('/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ feedback, channel, source })
+      body: JSON.stringify({ feedback, channel, source, tier })
     });
     
     console.log('📥 [SUBMIT] Response status:', res.status);
@@ -194,8 +209,8 @@ function renderTable(rows) {
 
   console.log(`📋 [RENDER] Showing page ${pageState.currentPage}/${totalPages}, IDs:`, paged.map(r => r.id).join(', '));
 
-  const table = document.querySelector('#table-body');
-  if (!table) {
+  const tableBody = document.querySelector('#table-body');
+  if (!tableBody) {
     console.warn('⚠️ Table body not found');
     return;
   }
@@ -209,47 +224,71 @@ function renderTable(rows) {
     whenField = 'created_at';
   } else if (fieldKey === 'positive' || fieldKey === 'negative') {
     whenLabel = 'Sentiment';
-    whenField = null;  // No date field for sentiment
+    whenField = null;
   }
 
-  table.innerHTML = paged.map(r => {
+  // Generate cells based on column order and visibility
+  const visibleCols = columnState.order.filter(col => columnState.visible[col]);
+  
+  tableBody.innerHTML = paged.map(r => {
     let whenVal;
     if (whenField) {
       whenVal = r[whenField] || r.created_at;
     } else {
       whenVal = r.sentiment?.toFixed(2) || 'N/A';
     }
-    return `
-      <tr data-id="${r.id}">
-        <td>${r.id}</td>
-        <td>
-          <select class="status-select" data-id="${r.id}">
-            <option value="To Do" ${r.status === 'To Do' ? 'selected' : ''}>To Do</option>
-            <option value="in progress" ${r.status === 'in progress' ? 'selected' : ''}>In Progress</option>
-            <option value="to be reviewed" ${r.status === 'to be reviewed' ? 'selected' : ''}>To Review</option>
-            <option value="done" ${r.status === 'done' ? 'selected' : ''}>Done</option>
-          </select>
-        </td>
-        <td>
-          <select class="tag-select" data-id="${r.id}">
-            <option value="Bug Report" ${r.tag === 'Bug Report' ? 'selected' : ''}>Bug Report</option>
-            <option value="Feature Request" ${r.tag === 'Feature Request' ? 'selected' : ''}>Feature Request</option>
-            <option value="Urgent" ${r.tag === 'Urgent' ? 'selected' : ''}>Urgent</option>
-            <option value="Security" ${r.tag === 'Security' ? 'selected' : ''}>Security</option>
-            <option value="Performance" ${r.tag === 'Performance' ? 'selected' : ''}>Performance</option>
-            <option value="Praise" ${r.tag === 'Praise' ? 'selected' : ''}>Praise</option>
-            <option value="Other" ${r.tag === 'Other' ? 'selected' : ''}>Other</option>
-          </select>
-        </td>
-        <td style="cursor: pointer; color: #3b82f6;" onclick="openSentimentModal(${r.id}, ${r.sentiment || 0})" title="Click to edit sentiment">${r.sentiment?.toFixed ? r.sentiment.toFixed(2) : 'N/A'}</td>
-        <td class="text-cell" data-id="${r.id}" contenteditable="true" title="Click to edit text" style="max-width: 260px; overflow: hidden;">${escapeHtml(r.text)}</td>
-        <td><span class="tag" style="font-size: 11px;">${r.user_tier || 'unknown'}</span></td>
-        <td>${r.channel || '-'}</td>
-        <td><span class="pill" style="background:#1f2937;">${whenLabel}</span> ${typeof whenVal === 'string' && whenVal.includes('-') ? whenVal.slice(0, 16) : whenVal}</td>
-        <td>
-          <button class="small save-btn" data-id="${r.id}">Save</button>
-        </td>
-      </tr>`;
+    
+    const cells = visibleCols.map(col => {
+      switch(col) {
+        case 'id':
+          return `<td>${r.id}</td>`;
+        case 'status':
+          return `<td>
+            <select class="status-select" data-id="${r.id}">
+              <option value="To Do" ${r.status === 'To Do' ? 'selected' : ''}>To Do</option>
+              <option value="in progress" ${r.status === 'in progress' ? 'selected' : ''}>In Progress</option>
+              <option value="to be reviewed" ${r.status === 'to be reviewed' ? 'selected' : ''}>To Review</option>
+              <option value="done" ${r.status === 'done' ? 'selected' : ''}>Done</option>
+            </select>
+          </td>`;
+        case 'tag':
+          return `<td>
+            <select class="tag-select" data-id="${r.id}">
+              <option value="Bug Report" ${r.tag === 'Bug Report' ? 'selected' : ''}>Bug Report</option>
+              <option value="Feature Request" ${r.tag === 'Feature Request' ? 'selected' : ''}>Feature Request</option>
+              <option value="Urgent" ${r.tag === 'Urgent' ? 'selected' : ''}>Urgent</option>
+              <option value="Security" ${r.tag === 'Security' ? 'selected' : ''}>Security</option>
+              <option value="Performance" ${r.tag === 'Performance' ? 'selected' : ''}>Performance</option>
+              <option value="Praise" ${r.tag === 'Praise' ? 'selected' : ''}>Praise</option>
+              <option value="Other" ${r.tag === 'Other' ? 'selected' : ''}>Other</option>
+            </select>
+          </td>`;
+        case 'sentiment':
+          return `<td style="cursor: pointer; font-weight: 600;" onclick="openSentimentModal(${r.id}, ${r.sentiment || 0})" title="Click to edit sentiment">
+            <span style="color: ${getSentimentColor(r.sentiment)};">${r.sentiment?.toFixed ? r.sentiment.toFixed(2) : 'N/A'}</span>
+          </td>`;
+        case 'text':
+          return `<td style="position: relative;">
+            <div class="text-cell" data-id="${r.id}" contenteditable="true" title="Click to edit text" style="max-width: 260px; overflow: hidden; min-height: 20px;">${escapeHtml(r.text)}</div>
+            <div class="edit-actions" data-id="${r.id}" style="display: none; margin-top: 6px; gap: 6px;">
+              <button class="small save-text-btn" data-id="${r.id}">Save</button>
+              <button class="small secondary cancel-text-btn" data-id="${r.id}">Cancel</button>
+            </div>
+          </td>`;
+        case 'tier':
+          return `<td><span class="tag" style="font-size: 11px;">${r.user_tier || 'unknown'}</span></td>`;
+        case 'channel':
+          return `<td>${r.channel || '-'}</td>`;
+        case 'when':
+          return `<td><span class="pill" style="background:#1f2937;">${whenLabel}</span> ${typeof whenVal === 'string' && whenVal.includes('-') ? whenVal.slice(0, 16) : whenVal}</td>`;
+        case 'actions':
+          return `<td><button class="small danger delete-btn" data-id="${r.id}" title="Delete this entry">🗑️ Delete</button></td>`;
+        default:
+          return '<td></td>';
+      }
+    }).join('');
+    
+    return `<tr data-id="${r.id}">${cells}</tr>`;
   }).join('');
 
   const paginationContainer = document.querySelector('#pagination-main');
@@ -282,7 +321,7 @@ function renderTable(rows) {
     }
   }
 
-  table.querySelectorAll('.status-select').forEach(select => {
+  document.querySelectorAll('#table-body .status-select').forEach(select => {
     select.addEventListener('change', async (e) => {
       const id = parseInt(e.target.dataset.id, 10);
       const newStatus = e.target.value;
@@ -292,7 +331,7 @@ function renderTable(rows) {
     });
   });
 
-  table.querySelectorAll('.tag-select').forEach(select => {
+  document.querySelectorAll('#table-body .tag-select').forEach(select => {
     select.addEventListener('change', async (e) => {
       const id = parseInt(e.target.dataset.id, 10);
       const newTag = e.target.value;
@@ -302,13 +341,78 @@ function renderTable(rows) {
     });
   });
 
-  table.querySelectorAll('.save-btn').forEach(btn => {
+  // Text cell editing with inline save/cancel
+  document.querySelectorAll('#table-body .text-cell').forEach(cell => {
+    const id = parseInt(cell.dataset.id, 10);
+    const actionsDiv = cell.parentElement.querySelector('.edit-actions');
+    let originalText = '';
+
+    cell.addEventListener('focus', () => {
+      originalText = cell.textContent;
+      if (actionsDiv) actionsDiv.style.display = 'flex';
+      console.log(`✏️ [EDIT-START] ID ${id}`);
+    });
+
+    cell.addEventListener('blur', (e) => {
+      // Don't hide if clicking save/cancel buttons
+      if (e.relatedTarget?.classList.contains('save-text-btn') || 
+          e.relatedTarget?.classList.contains('cancel-text-btn')) {
+        return;
+      }
+      setTimeout(() => {
+        if (actionsDiv) actionsDiv.style.display = 'none';
+      }, 200);
+    });
+  });
+
+  document.querySelectorAll('#table-body .save-text-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = parseInt(e.target.dataset.id, 10);
+      const cell = e.target.closest('td').querySelector('.text-cell');
+      const actionsDiv = e.target.closest('.edit-actions');
+      const text = cell.textContent.trim();
+      
+      if (!text) {
+        alert('Text cannot be empty');
+        return;
+      }
+      
+      console.log(`💾 [SAVE-TEXT] ID ${id}`);
+      await updateFeedbackText(id, text);
+      if (actionsDiv) actionsDiv.style.display = 'none';
+    });
+  });
+
+  document.querySelectorAll('#table-body .cancel-text-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const cell = e.target.closest('td').querySelector('.text-cell');
+      const actionsDiv = e.target.closest('.edit-actions');
+      
+      // Trigger refresh to restore original text
+      console.log(`❌ [CANCEL-TEXT] Refreshing table`);
+      if (actionsDiv) actionsDiv.style.display = 'none';
+      refreshTable();
+    });
+  });
+
+  // Delete button handlers with double confirmation
+  document.querySelectorAll('#table-body .delete-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       const id = parseInt(e.target.dataset.id, 10);
       const row = e.target.closest('tr');
-      const text = row.querySelector('.text-cell').textContent;
-      console.log(`💾 [SAVE] ID ${id}, text: "${text.slice(0, 30)}..."`);
-      await updateFeedbackText(id, text);
+      const feedbackText = row.querySelector('.text-cell')?.textContent || '';
+      
+      // First confirmation
+      const confirm1 = confirm(`Delete feedback #${id}?\n\n"${feedbackText.slice(0, 60)}${feedbackText.length > 60 ? '...' : ''}"`);
+      if (!confirm1) return;
+      
+      // Second confirmation
+      const confirm2 = confirm('Are you absolutely sure? This cannot be undone.');
+      if (!confirm2) return;
+      
+      console.log(`🗑️ [DELETE] Deleting ID ${id}`);
+      await deleteFeedback(id);
+      await refreshAll();
     });
   });
 }
@@ -375,6 +479,30 @@ async function updateFeedbackTag(id, tag) {
   }
 }
 
+// ===== DELETE FEEDBACK =====
+async function deleteFeedback(id) {
+  console.log(`🗑️ [DELETE] ID ${id}`);
+  try {
+    const res = await fetch(`/feedback/${id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (res.ok) {
+      console.log(`✅ [DELETE] Success`);
+      return true;
+    } else {
+      console.error(`❌ [DELETE] Error:`, data.error);
+      alert(`Failed to delete: ${data.error}`);
+      return false;
+    }
+  } catch (err) {
+    console.error(`❌ [DELETE] Exception:`, err);
+    alert(`Error: ${err.message}`);
+    return false;
+  }
+}
+
 // ===== RENDER CHARTS =====
 async function renderAdvancedCharts() {
   console.log('📊 [ADVANCED-CHARTS] Fetching advanced analytics data');
@@ -417,12 +545,16 @@ function renderTierSentimentChart(tierData) {
     const medianIdx = Math.floor(len * 0.5);
     const q3Idx = Math.floor(len * 0.75);
     
+    // Calculate mean
+    const mean = values.reduce((a, b) => a + b, 0) / len;
+    
     return {
       min: sorted[0],
       q1: sorted[q1Idx],
       median: sorted[medianIdx],
       q3: sorted[q3Idx],
-      max: sorted[len - 1]
+      max: sorted[len - 1],
+      mean: mean
     };
   }).filter(d => d !== null);
   
@@ -475,21 +607,33 @@ function renderTierSentimentChart(tierData) {
       },
       plugins: {
         legend: {
-          display: true,
-          labels: {
-            color: '#e2e8f0',
-            padding: 15,
-            font: { size: 13 }
-          }
+          display: false
         },
         tooltip: {
           enabled: true,
-          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          backgroundColor: 'rgba(0, 0, 0, 0.95)',
           titleColor: '#fff',
           bodyColor: '#e2e8f0',
           borderColor: '#475569',
           borderWidth: 1,
-          padding: 12
+          padding: 12,
+          maxWidth: 300,
+          callbacks: {
+            title: (context) => {
+              return `${dimensions[context[0].dataIndex]}`;
+            },
+            label: (context) => {
+              const data = context.raw;
+              return [
+                `Min: ${data.min.toFixed(3)}`,
+                `Q1: ${data.q1.toFixed(3)}`,
+                `Median: ${data.median.toFixed(3)}`,
+                `Mean: ${data.mean.toFixed(3)}`,
+                `Q3: ${data.q3.toFixed(3)}`,
+                `Max: ${data.max.toFixed(3)}`
+              ];
+            }
+          }
         }
       },
       scales: {
@@ -689,10 +833,11 @@ function renderResolutionTimeChart(resolutionData) {
         }
       },
       indexAxis: 'y',
-      plugins: { legend: { labels: { color: '#e2e8f0' } } },
+      plugins: { legend: { display: false } },
       scales: { 
         x: { 
           ticks: { color: '#e2e8f0' },
+          title: { display: true, text: 'Average Resolution Time (hours)', color: '#e2e8f0' },
           beginAtZero: true
         }, 
         y: { ticks: { color: '#e2e8f0' } } 
@@ -743,9 +888,11 @@ function renderCharts(summary) {
   sentChart = new Chart(sentCtx, {
     type: 'bar',
     data: { 
-      labels: sentLabels, 
+      labels: sentLabels.map(s => {
+        return s.charAt(0).toUpperCase() + s.slice(1);
+      }),
       datasets: [{ 
-        label: 'Count', 
+        label: 'Feedback Count', 
         data: sentCounts, 
         backgroundColor: sentLabels.map(s => {
           if (s === 'positive') return '#22c55e';
@@ -755,6 +902,8 @@ function renderCharts(summary) {
       }] 
     },
     options: {
+      responsive: true,
+      aspectRatio: 1,
       onClick: (e, elements) => {
         if (elements.length > 0) {
           const idx = elements[0].index;
@@ -768,7 +917,7 @@ function renderCharts(summary) {
         }
       },
       scales: { x: { ticks: { color: '#e2e8f0' } }, y: { ticks: { color: '#e2e8f0' } } },
-      plugins: { legend: { labels: { color: '#e2e8f0' } } }
+      plugins: { legend: { display: false } }
     }
   });
   console.log('✅ [RENDER-CHARTS] Charts created with color-coded sentiment');
@@ -891,7 +1040,7 @@ function renderGanttChart(data) {
   let html = `
     <div style="min-width: ${daysDiff * 60 + 200}px;">
       <div style="display: flex; border-bottom: 2px solid #1f2937; padding-bottom: 8px; margin-bottom: 8px;">
-        <div style="width: 180px; font-weight: 600; color: #94a3b8; font-size: 13px; padding: 8px;">
+        <div style="width: 180px; min-width: 180px; flex-shrink: 0; font-weight: 600; color: #94a3b8; font-size: 13px; padding: 8px; position: sticky; left: 0; background: #111827; z-index: 10; border-right: 1px solid #1f2937; box-sizing: border-box;">
           ${groupBy.charAt(0).toUpperCase() + groupBy.slice(1)}
         </div>
         <div style="flex: 1; display: flex; gap: 2px;">
@@ -965,8 +1114,8 @@ function renderGanttChart(data) {
     const containerHeight = rowCount * rowHeight + 8;
     
     html += `
-      <div style="display: flex; align-items: flex-start; margin-bottom: 4px; min-height: ${containerHeight}px;">
-        <div style="width: 180px; padding: 8px; font-size: 13px; color: #e2e8f0; font-weight: 500;">
+      <div style="display: flex; align-items: stretch; margin-bottom: 4px; min-height: ${containerHeight}px;">
+        <div style="width: 180px; min-width: 180px; flex-shrink: 0; padding: 8px; font-size: 13px; color: #e2e8f0; font-weight: 500; position: sticky; left: 0; background: #111827; z-index: 10; border-right: 1px solid #1f2937; box-sizing: border-box;">
           ${groupKey} <span style="color: #64748b; font-size: 11px;">(${items.length})</span>
         </div>
         <div style="flex: 1; position: relative; height: ${containerHeight}px; display: flex; gap: 2px;">
@@ -1127,6 +1276,7 @@ function closeFeedbackModal() {
   document.getElementById('feedbackModal').classList.remove('active');
   document.getElementById('modalFeedback').value = '';
   document.getElementById('modalSource').value = '';
+  document.getElementById('modalTier').value = 'free';
   document.getElementById('modalStatus').textContent = '';
   console.log('📝 [MODAL] Feedback form closed');
 }
@@ -1221,9 +1371,39 @@ function clearSelection() {
 }
 
 // ===== HELPERS =====
+function getSentimentColor(sentiment) {
+  if (sentiment === null || sentiment === undefined) return '#94a3b8';
+  
+  // Negative (-1 to -0.2): red gradient
+  if (sentiment < -0.2) {
+    const intensity = Math.abs(sentiment);
+    const r = Math.floor(239 * intensity + 150 * (1 - intensity));
+    const g = Math.floor(68 * intensity + 100 * (1 - intensity));
+    const b = Math.floor(68 * intensity + 150 * (1 - intensity));
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+  // Neutral (-0.2 to 0.2): blue
+  else if (sentiment <= 0.2) {
+    return '#3b82f6';
+  }
+  // Positive (0.2 to 1): green gradient
+  else {
+    const intensity = sentiment;
+    const r = Math.floor(34 * intensity + 100 * (1 - intensity));
+    const g = Math.floor(197 * intensity + 150 * (1 - intensity));
+    const b = Math.floor(94 * intensity + 100 * (1 - intensity));
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+}
+
 function setLoading(isLoading) {
-  document.getElementById('submit').disabled = isLoading;
-  console.log(`⏳ [LOADING] Submit button disabled: ${isLoading}`);
+  const submitBtn = document.getElementById('modalSubmit');
+  if (submitBtn) {
+    submitBtn.disabled = isLoading;
+    console.log(`⏳ [LOADING] Submit button disabled: ${isLoading}`);
+  } else {
+    console.warn('⚠️ [LOADING] Submit button not found');
+  }
 }
 
 function debounce(fn, wait) {
@@ -1406,6 +1586,146 @@ if (searchInput) {
 
 console.log('🚀 [INIT] Loading initial data...');
 refreshAll();
+loadFeedbackDates();
+
+// ===== MARKDOWN TO HTML CONVERTER =====
+function markdownToHtml(text) {
+  if (!text) return '';
+  
+  // Escape HTML entities first
+  text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  
+  // Convert **text** to <strong>text</strong>
+  text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+  // Split by paragraphs (double newlines)
+  const paragraphs = text.split(/\n\n+/);
+  
+  const htmlParagraphs = paragraphs.map(para => {
+    const lines = para.split('\n');
+    
+    // Check if this paragraph contains a list
+    const isOrderedList = lines.some(l => /^\d+\.\s/.test(l));
+    const isUnorderedList = lines.some(l => /^[\*\-]\s/.test(l));
+    
+    if (isOrderedList) {
+      // Convert numbered list
+      const listItems = lines
+        .filter(l => /^\d+\.\s/.test(l))
+        .map(l => l.replace(/^\d+\.\s+/, ''))
+        .map(item => `<li>${item}</li>`)
+        .join('');
+      return `<ol style="margin: 8px 0; padding-left: 24px;">${listItems}</ol>`;
+    } else if (isUnorderedList) {
+      // Convert bullet list
+      const listItems = lines
+        .filter(l => /^[\*\-]\s/.test(l))
+        .map(l => l.replace(/^[\*\-]\s+/, ''))
+        .map(item => `<li>${item}</li>`)
+        .join('');
+      return `<ul style="margin: 8px 0; padding-left: 24px;">${listItems}</ul>`;
+    } else {
+      // Regular paragraph - filter empty lines
+      const cleanText = lines.filter(l => l.trim()).join(' ');
+      return cleanText ? `<div style="margin-bottom: 8px; line-height: 1.6;">${cleanText}</div>` : '';
+    }
+  }).join('');
+  
+  return htmlParagraphs;
+}
+
+// ===== DAILY SUMMARY HANDLERS =====
+async function loadFeedbackDates() {
+  console.log('📅 [DAILY-SUMMARY] Loading available dates...');
+  try {
+    const res = await fetch('/analytics/feedback-dates');
+    const dates = await res.json();
+    console.log(`✅ [DAILY-SUMMARY] Got ${dates?.length || 0} dates`);
+    
+    const dateSelect = document.getElementById('dailySummaryDate');
+    if (dateSelect && Array.isArray(dates)) {
+      dateSelect.innerHTML = '<option value="">Select a date...</option>' + 
+        dates.map(d => `<option value="${d}">${d}</option>`).join('');
+    }
+  } catch (err) {
+    console.error('❌ [DAILY-SUMMARY] Error loading dates:', err);
+  }
+}
+
+async function loadDailySummary() {
+  const dateSelect = document.getElementById('dailySummaryDate');
+  const statusEl = document.getElementById('dailySummaryStatus');
+  const contentEl = document.getElementById('dailySummaryContent');
+  const metaEl = document.getElementById('dailySummaryMeta');
+  const textEl = document.getElementById('dailySummaryText');
+  const placeholderEl = document.getElementById('dailySummaryPlaceholder');
+  
+  const date = dateSelect?.value;
+  if (!date) {
+    if (statusEl) statusEl.textContent = 'Please select a date';
+    return;
+  }
+  
+  console.log(`📅 [DAILY-SUMMARY] Loading summary for ${date}...`);
+  if (statusEl) statusEl.textContent = '⏳ Loading...';
+  if (contentEl) contentEl.style.display = 'block';
+  if (placeholderEl) placeholderEl.style.display = 'block';
+  if (textEl) textEl.innerHTML = '';
+  
+  try {
+    const res = await fetch(`/analytics/daily-summary?date=${encodeURIComponent(date)}`);
+    const data = await res.json();
+    console.log('✅ [DAILY-SUMMARY] Summary received:', data);
+    
+    if (contentEl && metaEl && textEl) {
+      contentEl.style.display = 'block';
+      if (placeholderEl) placeholderEl.style.display = 'none';
+      
+      // Format metadata
+      const cacheIndicator = data.cached ? '💾 cached' : '✨ fresh';
+      const countInfo = data.count ? ` · ${data.count} item${data.count !== 1 ? 's' : ''}` : '';
+      metaEl.innerHTML = `<strong>${data.date}</strong> ${cacheIndicator}${countInfo}`;
+      
+      // Convert markdown to HTML and display
+      const htmlContent = markdownToHtml(data.summary);
+      textEl.innerHTML = htmlContent;
+    }
+    if (statusEl) statusEl.textContent = '';
+  } catch (err) {
+    console.error('❌ [DAILY-SUMMARY] Error:', err);
+    if (statusEl) statusEl.textContent = '❌ Error loading summary';
+    if (textEl) {
+      textEl.innerHTML = '<div style="color: #ef4444;">Failed to load summary.</div>';
+    }
+  }
+}
+
+const loadDailySummaryBtn = document.getElementById('loadDailySummary');
+if (loadDailySummaryBtn) {
+  loadDailySummaryBtn.onclick = loadDailySummary;
+  console.log('✓ [INIT] Daily summary button listener attached');
+}
+
+const dailySummaryDateSelect = document.getElementById('dailySummaryDate');
+if (dailySummaryDateSelect) {
+  dailySummaryDateSelect.addEventListener('change', loadDailySummary);
+  console.log('✓ [INIT] Daily summary date listener attached');
+}
+
+// ===== DAILY SUMMARY COLLAPSE HANDLER =====
+const dailySummaryHeader = document.getElementById('dailySummaryHeader');
+const dailySummaryContainer = document.getElementById('dailySummaryContainer');
+const dailySummaryToggle = document.getElementById('dailySummaryToggle');
+
+if (dailySummaryHeader && dailySummaryContainer) {
+  dailySummaryHeader.addEventListener('click', () => {
+    const isHidden = dailySummaryContainer.style.display === 'none';
+    dailySummaryContainer.style.display = isHidden ? 'block' : 'none';
+    dailySummaryToggle.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(-90deg)';
+    console.log(`📅 [DAILY-SUMMARY] Toggled to: ${isHidden ? 'open' : 'closed'}`);
+  });
+  console.log('✓ [INIT] Daily summary collapse listener attached');
+}
 
 // ===== SENTIMENT STAR HANDLERS =====
 document.querySelectorAll('#sentimentStars span').forEach(star => {
@@ -1429,3 +1749,280 @@ document.getElementById('sentimentModal').addEventListener('click', (e) => {
 document.getElementById('feedbackModal').addEventListener('click', (e) => {
   if (e.target.id === 'feedbackModal') closeFeedbackModal();
 });
+// ===== COLUMN CONFIGURATION =====
+const columnConfigBtn = document.getElementById('columnConfigBtn');
+const columnConfig = document.getElementById('columnConfig');
+const columnLabels = {
+  id: 'ID',
+  status: 'Status',
+  tag: 'Tag',
+  sentiment: 'Sentiment',
+  text: 'Text',
+  tier: 'Tier',
+  channel: 'Channel',
+  when: 'When',
+  actions: 'Actions'
+};
+
+function saveColumnState() {
+  localStorage.setItem('columnState', JSON.stringify(columnState));
+}
+
+function attachFilterListeners() {
+  const filterStatusSelect = document.getElementById('filterStatus');
+  const filterTierSelect = document.getElementById('filterTier');
+  const filterSourceSelect = document.getElementById('filterSource');
+  const filterTagSelect = document.getElementById('filterTag');
+  const sentimentSort = document.getElementById('sentimentSort');
+  const whenSelect = document.getElementById('whenSelect');
+
+  if (filterStatusSelect) {
+    filterStatusSelect.addEventListener('change', (e) => {
+      pageState.filterStatus = e.target.value;
+      pageState.currentPage = 1;
+      renderTable(allFeedback);
+    });
+  }
+
+  if (filterTierSelect) {
+    filterTierSelect.addEventListener('change', (e) => {
+      pageState.filterTier = e.target.value;
+      pageState.currentPage = 1;
+      renderTable(allFeedback);
+    });
+  }
+
+  if (filterSourceSelect) {
+    filterSourceSelect.addEventListener('change', (e) => {
+      pageState.filterSource = e.target.value;
+      pageState.currentPage = 1;
+      renderTable(allFeedback);
+    });
+  }
+
+  if (filterTagSelect) {
+    filterTagSelect.addEventListener('change', (e) => {
+      pageState.filterTag = e.target.value;
+      pageState.currentPage = 1;
+      renderTable(allFeedback);
+    });
+  }
+
+  if (sentimentSort) {
+    sentimentSort.addEventListener('change', (e) => {
+      if (e.target.value) {
+        pageState.sortKey = e.target.value;
+        if (whenSelect) whenSelect.value = '';
+      } else {
+        pageState.sortKey = 'updated_desc';
+      }
+      pageState.currentPage = 1;
+      renderTable(allFeedback);
+    });
+  }
+
+  if (whenSelect) {
+    whenSelect.addEventListener('change', (e) => {
+      if (e.target.value) {
+        pageState.sortKey = e.target.value;
+        if (sentimentSort) sentimentSort.value = '';
+      } else {
+        pageState.sortKey = 'updated_desc';
+      }
+      pageState.currentPage = 1;
+      renderTable(allFeedback);
+    });
+  }
+}
+
+function renderTableHeader() {
+  const tableHead = document.getElementById('table-head');
+  if (!tableHead) return;
+  
+  const visibleCols = columnState.order.filter(col => columnState.visible[col]);
+  
+  const headers = visibleCols.map(col => {
+    switch(col) {
+      case 'id':
+        return '<th style="width: 60px;">ID</th>';
+      case 'status':
+        return `<th>
+          <div class="th-filter">
+            <span>Status</span>
+            <select id="filterStatus">
+              <option value="">All</option>
+              <option value="To Do">To Do</option>
+              <option value="in progress">In Progress</option>
+              <option value="to be reviewed">To Review</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+        </th>`;
+      case 'tag':
+        return `<th>
+          <div class="th-filter">
+            <span>Tag</span>
+            <select id="filterTag">
+              <option value="">All</option>
+              <option value="Bug Report">Bug Report</option>
+              <option value="Feature Request">Feature Request</option>
+              <option value="Urgent">Urgent</option>
+              <option value="Security">Security</option>
+              <option value="Performance">Performance</option>
+              <option value="Praise">Praise</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </th>`;
+      case 'sentiment':
+        return `<th>
+          <div class="th-filter">
+            <span>Sentiment</span>
+            <select id="sentimentSort">
+              <option value="">Default</option>
+              <option value="positive_desc">Most Positive</option>
+              <option value="negative_desc">Most Negative</option>
+            </select>
+          </div>
+        </th>`;
+      case 'text':
+        return '<th style="min-width: 320px;">Text</th>';
+      case 'tier':
+        return `<th>
+          <div class="th-filter">
+            <span>Tier</span>
+            <select id="filterTier">
+              <option value="">All</option>
+              <optgroup label="External Stakeholders">
+                <option value="free">Free User</option>
+                <option value="pro">Pro User</option>
+                <option value="business">Business User</option>
+                <option value="enterprise">Enterprise User</option>
+              </optgroup>
+              <optgroup label="Internal Stakeholders">
+                <option value="dev">Developer</option>
+                <option value="tester">QA Tester</option>
+                <option value="team lead">Team Lead</option>
+                <option value="manager">Manager</option>
+              </optgroup>
+            </select>
+          </div>
+        </th>`;
+      case 'channel':
+        return `<th>
+          <div class="th-filter">
+            <span>Channel</span>
+            <select id="filterSource">
+              <option value="">All</option>
+              <option value="web">Web</option>
+              <option value="discord">Discord</option>
+              <option value="github">GitHub</option>
+              <option value="twitter">Twitter</option>
+              <option value="email">Email</option>
+              <option value="support">Support</option>
+            </select>
+          </div>
+        </th>`;
+      case 'when':
+        return `<th>
+          <div class="th-filter">
+            <span>When</span>
+            <select id="whenSelect">
+              <option value="updated_desc">Updated · Newest</option>
+              <option value="updated_asc">Updated · Oldest</option>
+              <option value="created_desc">Created · Newest</option>
+              <option value="created_asc">Created · Oldest</option>
+            </select>
+          </div>
+        </th>`;
+      case 'actions':
+        return '<th>Actions</th>';
+      default:
+        return '<th></th>';
+    }
+  }).join('');
+  
+  tableHead.innerHTML = `<tr>${headers}</tr>`;
+  
+  // Re-attach filter listeners after rendering
+  attachFilterListeners();
+}
+
+function renderColumnConfig() {
+  const orderDiv = document.getElementById('columnOrder');
+  
+  // Render draggable chips with checkboxes
+  orderDiv.innerHTML = columnState.order.map(col => `
+    <div class="column-chip" draggable="true" data-column="${col}" style="padding: 6px 10px; background: ${columnState.visible[col] ? '#1f2937' : '#0f172a'}; border: 1px solid ${columnState.visible[col] ? '#374151' : '#1f2937'}; border-radius: 6px; cursor: move; font-size: 12px; user-select: none; display: flex; align-items: center; gap: 6px;">
+      <input type="checkbox" ${columnState.visible[col] ? 'checked' : ''} data-column="${col}" class="column-toggle" style="cursor: pointer;" onclick="event.stopPropagation();">
+      <span style="opacity: ${columnState.visible[col] ? '1' : '0.5'};">${columnLabels[col]}</span>
+    </div>
+  `).join('');
+  
+  // Attach toggle listeners
+  document.querySelectorAll('.column-toggle').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const col = e.target.dataset.column;
+      columnState.visible[col] = e.target.checked;
+      saveColumnState();
+      renderColumnConfig();
+      updateTableColumns();
+      console.log(`🔧 [COLUMN] Toggled ${col}: ${e.target.checked}`);
+    });
+  });
+  
+  // Attach drag listeners
+  const chips = document.querySelectorAll('.column-chip');
+  chips.forEach(chip => {
+    chip.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move';
+      const col = e.target.dataset.column || e.target.closest('.column-chip').dataset.column;
+      e.dataTransfer.setData('text/plain', col);
+      e.target.style.opacity = '0.5';
+    });
+    
+    chip.addEventListener('dragend', (e) => {
+      e.target.style.opacity = '1';
+    });
+    
+    chip.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+    
+    chip.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const draggedCol = e.dataTransfer.getData('text/plain');
+      const targetCol = e.target.dataset.column || e.target.closest('.column-chip')?.dataset.column;
+      
+      if (draggedCol && targetCol && draggedCol !== targetCol) {
+        const dragIdx = columnState.order.indexOf(draggedCol);
+        const targetIdx = columnState.order.indexOf(targetCol);
+        
+        columnState.order.splice(dragIdx, 1);
+        columnState.order.splice(targetIdx, 0, draggedCol);
+        
+        saveColumnState();
+        renderColumnConfig();
+        updateTableColumns();
+        console.log(`🔧 [COLUMN] Reordered: ${draggedCol} → ${targetCol}`);
+      }
+    });
+  });
+}
+
+function updateTableColumns() {
+  renderTableHeader();
+  renderTable(allFeedback);
+}
+
+if (columnConfigBtn && columnConfig) {
+  columnConfigBtn.addEventListener('click', () => {
+    const isHidden = columnConfig.style.display === 'none';
+    columnConfig.style.display = isHidden ? 'block' : 'none';
+    if (isHidden) renderColumnConfig();
+  });
+}
+
+// Initialize table header on load
+renderTableHeader();

@@ -60,3 +60,38 @@ function clampNumber(value: any, min: number, max: number, fallback: number): nu
   if (Number.isFinite(num)) return Math.min(max, Math.max(min, num));
   return fallback;
 }
+
+export async function generateDailySummary(feedbackList: any[], date: string, env: CloudflareBindings): Promise<string> {
+  console.log(`🤖 [AI-DAILY-SUMMARY] Generating summary for ${date} with ${feedbackList.length} items`);
+  
+  if (feedbackList.length === 0) {
+    return `No feedback received on ${date}.`;
+  }
+
+  const feedbackTexts = feedbackList.map((f, i) => `${i + 1}. [${f.tag || 'Unknown'}] ${f.text}`).join('\n');
+  
+  const prompt = {
+    messages: [
+      { 
+        role: "system", 
+        content: "You are a product analyst. Summarize the day's feedback in 2-3 concise paragraphs. Highlight key themes, sentiment trends, urgent issues, and actionable insights. Be specific and data-driven." 
+      },
+      { 
+        role: "user", 
+        content: `Feedback received on ${date}:\n\n${feedbackTexts}\n\nProvide a comprehensive daily summary.` 
+      }
+    ],
+    max_tokens: 500,
+  };
+
+  try {
+    console.log("🤖 [AI-DAILY-SUMMARY] Calling AI model...");
+    const ai = await env.AI.run(CLASSIFIER_MODEL, prompt);
+    const summary = ai.response ?? ai;
+    console.log("✅ [AI-DAILY-SUMMARY] Generated summary:", typeof summary === 'string' ? summary.slice(0, 100) : summary);
+    return typeof summary === "string" ? summary : JSON.stringify(summary);
+  } catch (err) {
+    console.error("❌ [AI-DAILY-SUMMARY] Exception:", err);
+    return `Error generating summary: ${err}`;
+  }
+}

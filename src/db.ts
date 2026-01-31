@@ -144,6 +144,28 @@ export async function searchFeedback(env: CloudflareBindings, query: string) {
   return rows.results || [];
 }
 
+export async function getFeedbackByDate(env: CloudflareBindings, date: string) {
+  console.log("📅 [DB-BY-DATE] Fetching feedback for:", date);
+  
+  const rows = await env.DB.prepare(
+    "SELECT id, text, tag, sentiment, status, user_tier, channel, created_at FROM feedback WHERE DATE(created_at) = ? ORDER BY created_at DESC"
+  ).bind(date).all();
+
+  console.log("✅ [DB-BY-DATE] Found", rows.results?.length || 0, "items");
+  return rows.results || [];
+}
+
+export async function getUniqueFeedbackDates(env: CloudflareBindings, limit = 30) {
+  console.log("📅 [DB-DATES] Fetching unique feedback dates");
+  
+  const rows = await env.DB.prepare(
+    "SELECT DISTINCT DATE(created_at) as date FROM feedback ORDER BY date DESC LIMIT ?"
+  ).bind(limit).all();
+
+  console.log("✅ [DB-DATES] Found", rows.results?.length || 0, "unique dates");
+  return (rows.results || []).map((r: any) => r.date);
+}
+
 export async function getCachedSummary(env: CloudflareBindings, forceRefresh = false) {
   if (forceRefresh) {
     console.log("⏭️ [CACHE] Force refresh requested, skipping cache");
