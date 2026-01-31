@@ -2,8 +2,11 @@
 A serverless full-stack application built on the Cloudflare Developer Platform. This tool aggregates, analyzes, and visualizes user feedback using Cloudflare Workers, D1, KV, and Workers AI.
 [Dashboard Preview](https://application-task.yiucheung0512.workers.dev/)
 
-<img width="372" height="704" alt="image" src="https://github.com/user-attachments/assets/5207fd0a-5795-4a15-ae4d-f9c3e58133e2" />
-  
+<img width="300" height="632" alt="image" src="https://github.com/user-attachments/assets/af9d46ec-b5d3-475e-b5a9-e88d3ca99506" />
+<img width="300" height="632" alt="image" src="https://github.com/user-attachments/assets/c5476c0f-8872-48b9-a26a-484c1537dd2a" />
+
+
+
 ## 📌 Overview & Objectives
 The Cloudflare Feedback Analyzer is a comprehensive feedback management and analytics platform designed to help teams collect, organize, and understand user feedback at scale. Built entirely on serverless infrastructure, it demonstrates best practices for building modern, cost-effective, real-time data applications on Cloudflare's Developer Platform.
 
@@ -263,7 +266,7 @@ This project was built using **VS Code** with **GitHub Copilot** (Agent Mode) to
 
   
 
-## 🚀 Future Development & Enhancement Roadmap  
+## 🚀 Potential Improvements for Future Development & Enhancement
 
 - **Actual API Integration**: Connect to actual product feedback API endpoints (i.e. Customer Support Tickets, Discord, GitHub issues, email, X/Twitter, community forums, etc).
 
@@ -311,7 +314,6 @@ This project was built using **VS Code** with **GitHub Copilot** (Agent Mode) to
 
 - Optimize D1 queries with materialized views for heavy analytics workloads.
 
-  
 
 ### Known Limitations & Improvement Areas
 
